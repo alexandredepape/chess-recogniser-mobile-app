@@ -1,12 +1,17 @@
 import { Button, Linking, Pressable, SafeAreaView, StyleSheet, Text, Vibration, View } from "react-native";
-import Chessboard from "./components/chessboard";
+import Chessboard from "./src/components/chessboard";
 import { createRef, useEffect, useRef, useState } from "react";
 import { Chess } from "chess.js";
-import { getPieceImageFromPiece } from "./components/square_image_loader";
+import { getPieceImageFromPiece } from "./src/components/square_image_loader";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faArrowRotateRight, faCamera, faPlay, faTimes } from "@fortawesome/free-solid-svg-icons";
 import { Camera } from 'expo-camera';
-import { ProgressBar } from 'react-native-paper';
+
+import LoadingScreen from "./src/components/loading_screen";
+import CameraView from "./src/components/camera_view";
+
+const WHITE_QUEEN = getPieceImageFromPiece({type: "q", color: "w"});
+const BLACK_QUEEN = getPieceImageFromPiece({type: "q", color: "b"});
 
 export default function App() {
     const [game, setGame] = useState(new Chess("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"))
@@ -16,11 +21,11 @@ export default function App() {
     const [takingPicture, setTakingPicture] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
     const [serverIsPredicting, setServerIsPredicting] = useState(false);
-    const [progressBarValue, setProgressBarValue] = useState(0);
-
-    let chessboard = <Chessboard game={game} setGame={setGame} squareA1isBottomLeft={squareA1isBottomLeft}/>;
     const cameraRef = createRef();
 
+    const chessboard = <Chessboard game={game} setGame={setGame} squareA1isBottomLeft={squareA1isBottomLeft}/>;
+    const loadingScreen = <LoadingScreen serverIsPredicting={serverIsPredicting}/>;
+    const cameraView = <CameraView cameraRef={cameraRef} takePicture={takePicture}/>;
 
     function getFen() {
         let fen = game.fen();
@@ -31,25 +36,10 @@ export default function App() {
         return fen;
     }
 
-    const counter = useRef(0);
-
-    useEffect(() => {
-        console.log("useEffect called");
-        console.log("counter: " + JSON.stringify(counter));
-        let nbTicks = 50;
-        if (counter.current < nbTicks) {
-            counter.current += 1;
-            const timer = setTimeout(() => setProgressBarValue(progressBarValue + 1 / nbTicks), 4000 / nbTicks);
-
-            return () => {
-                clearTimeout(timer)
-            };
-        }
-    }, [progressBarValue]);
 
     // open "https://lichess.org/analysis/standard/" in the browser with the fen of the chessboard added to it
-    function sendToServer() {
-        console.log("sendToServer");
+    function goToLichess() {
+        console.log("goToLichess");
         let fen = getFen();
         // open the url in the browser
         Linking.openURL('https://lichess.org/analysis/standard/' + fen);
@@ -63,8 +53,6 @@ export default function App() {
         Vibration.vibrate(100);
     }
 
-    let whiteQueen = getPieceImageFromPiece({type: "q", color: "w"});
-    let blackQueen = getPieceImageFromPiece({type: "q", color: "b"});
 
     function resetGame() {
         setGame(new Chess());
@@ -79,44 +67,57 @@ export default function App() {
 
     function onInvertBoard() {
         Vibration.vibrate(100);
-        console.log("fen before invert: " + game.fen());
-        // reverse the fen notation and set a new game with the reversed fen notation
         let split = game.fen().split(" ");
         let fenRows = split[0];
         fenRows = fenRows.split("").reverse().join("");
         let newFen = fenRows + " " + split[1] + " " + split[2] + " " + split[3] + " " + split[4] + " " + split[5];
-        console.log("newFen: " + newFen);
         setGame(new Chess(newFen));
         setSquareA1isBottomLeft(!squareA1isBottomLeft);
     }
 
+    useEffect(() => {
+        console.log("useEffect takingPicture:" + takingPicture);
+        if (!takingPicture && photo.current) {
+            console.log("Sending to server a " + photo.current.width + "x" + photo.current.height + " image");
+            const URL = "https://f66d-2a02-a03f-6b2d-1e00-5951-5e9-2a97-f09e.eu.ngrok.io";
+            const PREDICT_ENDPOINT = URL + "/predict";
+
+            fetch(PREDICT_ENDPOINT, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    image_base_64: photo.current.base64
+                })
+            }).then(response => response.json()).then(data => {
+                console.log("fen: " + data.fen);
+                setServerIsPredicting(false);
+                photo.current = null;
+                let turn = data.fen.split(" ")[1];
+                setTurn(turn);
+                setGame(new Chess(data.fen));
+            });
+            console.log("setting server is predicting to true");
+            setServerIsPredicting(true);
+        }
+    }, [takingPicture]);
+
+    let photo = useRef(null);
 
     async function takePicture() {
-        console.log("takePicture");
+        console.log("takePictureButton pushed");
         Vibration.vibrate(100);
-
-        let photo = await cameraRef.current.takePictureAsync({quality: 1, base64: true});
+        console.log("Taking the picture");
+        let options = {
+            quality: 0.5,
+            skipProcessing: true,
+            base64: true
+        };
+        let result = await cameraRef.current.takePictureAsync(options);
         console.log("finished taking a picture");
-        counter.current = 0;
+        photo.current = result;
         setTakingPicture(false);
-        setServerIsPredicting(true);
-        setProgressBarValue(0);
-
-        const PREDICT_ENDPOINT = "https://84d1-2a02-a03f-6b2d-1e00-b52d-2a-1c52-daeb.eu.ngrok.io/predict";
-        fetch(PREDICT_ENDPOINT, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                image_base_64: photo.base64
-            })
-        }).then(response => response.json()).then(data => {
-            console.log("fen: " + data.fen);
-            setServerIsPredicting(false);
-            setGame(new Chess(data.fen));
-        });
-
     }
 
     if (!permission) {
@@ -136,35 +137,12 @@ export default function App() {
         );
     }
     if (takingPicture) {
-        return (
-            <View style={styles.cameraContainer}>
-                <Camera ref={cameraRef}
-                        style={styles.camera}
-                        onCameraReady={() => setCameraReady(true)}
-                >
-                    {cameraReady && <View style={styles.buttonContainer}>
-                        <Pressable style={styles.takePictureButton}
-                                   onPressIn={() => takePicture()}>
-                            <FontAwesomeIcon size={25} icon={faCamera} color={"black"}/>
-                        </Pressable>
-                    </View>}
-                </Camera>
-            </View>
-        )
+        return cameraView;
     }
     if (serverIsPredicting) {
-        return (
-            <View style={styles.progressBarContainer}>
-                <Text style={styles.text}>
-                    Server is calculating...
-                </Text>
-                <ProgressBar style={styles.progressBar}
-                             progress={progressBarValue}
-                             color={"#9dd4ae"}/>
-                {whiteQueen}
-            </View>
-        )
+        return loadingScreen;
     }
+    const size = 30;
     return (
         <SafeAreaView style={styles.container}>
 
@@ -173,7 +151,7 @@ export default function App() {
                 <View style={{flexDirection: "row", justifyContent: "space-between"}}>
                     <Pressable style={styles.invertButton}
                                onPressIn={() => onInvertBoard()}>
-                        <FontAwesomeIcon size={25} style={styles.icon} icon={faArrowRotateRight}/>
+                        <FontAwesomeIcon size={size} style={styles.icon} icon={faArrowRotateRight}/>
 
                         {/*<Text style={styles.buttonText}>*/}
                         {/*    Invert Board*/}
@@ -182,7 +160,7 @@ export default function App() {
                     {/*Create a button to empty the board*/}
                     <Pressable style={styles.emptyBoardButton}
                                onPressIn={() => resetGame()}>
-                        <FontAwesomeIcon size={25} icon={faTimes}/>
+                        <FontAwesomeIcon size={size} icon={faTimes}/>
 
                         {/*<Text style={styles.buttonText}>*/}
                         {/*    Reset Game*/}
@@ -191,14 +169,14 @@ export default function App() {
                     <Pressable style={styles.turnButton}
                                onPressIn={() => toggleTurn()}>
 
-                        {turn === "w" ? whiteQueen : blackQueen}
+                        {turn === "w" ? WHITE_QUEEN : BLACK_QUEEN}
                         {/*<Text style={styles.buttonText}>*/}
                         {/*    's turn*/}
                         {/*</Text>*/}
                     </Pressable>
                     <Pressable style={styles.applyButton}
-                               onPressIn={() => sendToServer()}>
-                        <FontAwesomeIcon size={25} icon={faPlay}/>
+                               onPressIn={() => goToLichess()}>
+                        <FontAwesomeIcon size={size} icon={faPlay}/>
                         {/*<Text style={styles.buttonText}>*/}
                         {/*    Apply*/}
                         {/*</Text>*/}
@@ -208,17 +186,18 @@ export default function App() {
 
                 <Pressable style={styles.cameraButton}
                            onPressIn={() => openCamera()}>
-                    <FontAwesomeIcon size={25} icon={faCamera}/>
+                    <FontAwesomeIcon size={size} icon={faCamera}/>
                 </Pressable>
             </View>
 
         </SafeAreaView>
     );
 }
+const BLUE = "#313845";
 
 const styles = StyleSheet.create({
     container: {
-        backgroundColor: "#313845",
+        backgroundColor: BLUE,
         flex: 1,
         flexDirection: 'column',
         justifyContent: "flex-start",
@@ -293,48 +272,21 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         userSelect: "none"
     },
-    cameraContainer: {
-        flex: 1,
-        justifyContent: 'center',
-    },
-    camera: {
-        flex: 1,
-    },
-    buttonContainer: {
-        flex: 1,
-        flexDirection: 'row',
-        justifyContent: 'center',
-        // backgroundColor: 'transparent',
-        // margin: 64,
-    },
     takePictureButton: {
         // flex: 1,
         alignSelf: 'flex-end',
         alignItems: 'center',
-        backgroundColor: "#ffdb81",
+        backgroundColor: "white",
         padding: 15,
-        borderRadius: 7.5,
+        width: 65,
+        height: 65,
+        borderRadius: 70 / 2,
         margin: 10,
         borderColor: "#000000",
-        borderWidth: 1,
     },
     text: {
         fontSize: 24,
         fontWeight: 'bold',
         color: '#ffdb81',
     },
-    progressBarContainer: {
-        flex: 1,
-        backgroundColor: "#313845",
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    progressBar: {
-        width: 300,
-        // backgroundColor: "white",
-        borderRadius: 7.5,
-        height: 15,
-        margin: 10,
-
-    }
 });
