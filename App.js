@@ -1,8 +1,8 @@
 import { Button, Linking, Pressable, SafeAreaView, StyleSheet, Text, Vibration, View } from "react-native";
-import Chessboard from "./components/chessboard";
+import Chessboard from "./src/components/chessboard";
 import { createRef, useEffect, useRef, useState } from "react";
 import { Chess } from "chess.js";
-import { getPieceImageFromPiece } from "./components/square_image_loader";
+import { getPieceImageFromPiece } from "./src/components/square_image_loader";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faArrowRotateRight, faCamera, faPlay, faTimes } from "@fortawesome/free-solid-svg-icons";
 import { Camera } from 'expo-camera';
@@ -45,6 +45,7 @@ export default function App() {
                 clearTimeout(timer)
             };
         }
+
     }, [progressBarValue]);
 
     // open "https://lichess.org/analysis/standard/" in the browser with the fen of the chessboard added to it
@@ -79,13 +80,10 @@ export default function App() {
 
     function onInvertBoard() {
         Vibration.vibrate(100);
-        console.log("fen before invert: " + game.fen());
-        // reverse the fen notation and set a new game with the reversed fen notation
         let split = game.fen().split(" ");
         let fenRows = split[0];
         fenRows = fenRows.split("").reverse().join("");
         let newFen = fenRows + " " + split[1] + " " + split[2] + " " + split[3] + " " + split[4] + " " + split[5];
-        console.log("newFen: " + newFen);
         setGame(new Chess(newFen));
         setSquareA1isBottomLeft(!squareA1isBottomLeft);
     }
