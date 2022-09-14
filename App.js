@@ -1,4 +1,15 @@
-import { Button, Linking, Pressable, SafeAreaView, StyleSheet, Text, Vibration, View } from "react-native";
+import {
+    Animated,
+    Button,
+    Easing,
+    Linking,
+    Pressable,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    Vibration,
+    View
+} from "react-native";
 import Chessboard from "./src/components/chessboard";
 import { createRef, useEffect, useRef, useState } from "react";
 import { Chess } from "chess.js";
@@ -16,8 +27,8 @@ export default function App() {
     const [takingPicture, setTakingPicture] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
     const [serverIsPredicting, setServerIsPredicting] = useState(false);
-    const [progressBarValue, setProgressBarValue] = useState(0);
 
+    const progressBarValue = useRef(new Animated.Value(0));
     let chessboard = <Chessboard game={game} setGame={setGame} squareA1isBottomLeft={squareA1isBottomLeft}/>;
     const cameraRef = createRef();
 
@@ -31,22 +42,21 @@ export default function App() {
         return fen;
     }
 
-    const counter = useRef(0);
-
     useEffect(() => {
         console.log("useEffect called");
-        console.log("counter: " + JSON.stringify(counter));
-        let nbTicks = 50;
-        if (counter.current < nbTicks) {
-            counter.current += 1;
-            const timer = setTimeout(() => setProgressBarValue(progressBarValue + 1 / nbTicks), 4000 / nbTicks);
-
-            return () => {
-                clearTimeout(timer)
-            };
+        console.log("serverIsPredicting: " + serverIsPredicting);
+        if (serverIsPredicting) {
+            console.log("creating animation");
+            progressBarValue.current.setValue(0);
+            Animated.timing(progressBarValue.current, {
+                    toValue: 1,
+                    duration: 2000,
+                    useNativeDriver: true,
+                    easing: Easing.linear,
+                }
+            ).start();
         }
-
-    }, [progressBarValue]);
+    }, [serverIsPredicting]);
 
     // open "https://lichess.org/analysis/standard/" in the browser with the fen of the chessboard added to it
     function sendToServer() {
@@ -95,10 +105,9 @@ export default function App() {
 
         let photo = await cameraRef.current.takePictureAsync({quality: 1, base64: true});
         console.log("finished taking a picture");
-        counter.current = 0;
-        setTakingPicture(false);
+        console.log("Setting server is predictin to TRUE");
         setServerIsPredicting(true);
-        setProgressBarValue(0);
+        setTakingPicture(false);
 
         const PREDICT_ENDPOINT = "https://84d1-2a02-a03f-6b2d-1e00-b52d-2a-1c52-daeb.eu.ngrok.io/predict";
         fetch(PREDICT_ENDPOINT, {
