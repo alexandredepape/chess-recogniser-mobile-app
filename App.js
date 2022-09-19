@@ -20,7 +20,7 @@ export default function App() {
     const [permission, requestPermission] = Camera.useCameraPermissions();
     const [takingPicture, setTakingPicture] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
-    const [serverIsPredicting, setServerIsPredicting] = useState(false);
+    const [serverIsPredicting, setServerIsPredicting] = useState(true);
     const cameraRef = createRef();
 
     const chessboard = <Chessboard game={game} setGame={setGame} squareA1isBottomLeft={squareA1isBottomLeft}/>;
